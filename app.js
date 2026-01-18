@@ -65,6 +65,7 @@ document.addEventListener('DOMContentLoaded', () => {
         countdown: 4,
         totalTime: 0,
         soundEnabled: false,
+        countdownEnabled: false,
         timeLimit: '',
         sessionComplete: false,
         timeLimitReached: false,
@@ -77,7 +78,9 @@ document.addEventListener('DOMContentLoaded', () => {
         viewportHeight: initialHeight,
         prefersReducedMotion: false,
         hasStarted: false,
-        startTime: null
+        startTime: null,
+        targetRounds: 0,
+        completedRounds: 0
     };
 
     // Settings persistence
@@ -87,6 +90,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const settings = {
                 soundEnabled: state.soundEnabled,
+                countdownEnabled: state.countdownEnabled,
                 exerciseType: state.exerciseType,
                 phaseTime: state.phaseTime,
                 exhaleDuration: state.exhaleDuration
@@ -104,6 +108,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const settings = JSON.parse(saved);
                 if (typeof settings.soundEnabled === 'boolean') {
                     state.soundEnabled = settings.soundEnabled;
+                }
+                if (typeof settings.countdownEnabled === 'boolean') {
+                    state.countdownEnabled = settings.countdownEnabled;
                 }
                 if (settings.exerciseType && exerciseTypes[settings.exerciseType]) {
                     state.exerciseType = settings.exerciseType;
@@ -172,8 +179,15 @@ document.addEventListener('DOMContentLoaded', () => {
         volume2: `<svg class="icon" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>`,
         volumeX: `<svg class="icon" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>`,
         rotateCcw: `<svg class="icon" viewBox="0 0 24 24"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>`,
-        clock: `<svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`
+        clock: `<svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`,
+        hash: `<svg class="icon" viewBox="0 0 24 24"><line x1="4" y1="9" x2="20" y2="9"></line><line x1="4" y1="15" x2="20" y2="15"></line><line x1="10" y1="3" x2="8" y2="21"></line><line x1="16" y1="3" x2="14" y2="21"></line></svg>`
     };
+
+    function toggleCountdown() {
+        state.countdownEnabled = !state.countdownEnabled;
+        saveSettings();
+        render();
+    }
 
     function getInstruction(count) {
         const phases = getCurrentPhases();
@@ -331,6 +345,13 @@ document.addEventListener('DOMContentLoaded', () => {
             state.count = 0;
             state.sessionComplete = false;
             state.timeLimitReached = false;
+            state.completedRounds = 0;
+            // For 4-7-8, treat timeLimit as rounds instead of minutes
+            if (state.exerciseType === 'fourSevenEight' && state.timeLimit) {
+                state.targetRounds = parseInt(state.timeLimit) || 0;
+            } else {
+                state.targetRounds = 0;
+            }
             state.pulseStartTime = performance.now();
             state.startTime = performance.now();
             playTone();
@@ -345,6 +366,8 @@ document.addEventListener('DOMContentLoaded', () => {
             state.sessionComplete = false;
             state.timeLimitReached = false;
             state.hasStarted = false;
+            state.targetRounds = 0;
+            state.completedRounds = 0;
             invalidateGradient();
             drawScene({ progress: 0, showTrail: false, phase: state.count });
             state.pulseStartTime = null;
@@ -366,6 +389,8 @@ document.addEventListener('DOMContentLoaded', () => {
         state.pulseStartTime = null;
         state.hasStarted = false;
         state.startTime = null;
+        state.targetRounds = 0;
+        state.completedRounds = 0;
         cancelAnimationFrame(animationFrameId);
         invalidateGradient();
         drawScene({ progress: 0, showTrail: false, phase: state.count });
@@ -398,6 +423,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function startWithPreset(minutes) {
         state.timeLimit = minutes.toString();
+        state.targetRounds = 0;
+        state.completedRounds = 0;
+        state.isPlaying = true;
+        state.totalTime = 0;
+        const phases = getCurrentPhases();
+        state.countdown = Math.ceil(phases[0].duration);
+        state.count = 0;
+        state.sessionComplete = false;
+        state.timeLimitReached = false;
+        state.pulseStartTime = performance.now();
+        state.hasStarted = true;
+        state.startTime = performance.now();
+        if (audioContext && audioContext.state === 'suspended') {
+            audioContext.resume().then(() => {
+                console.log('AudioContext resumed');
+            });
+        }
+        playTone();
+        animate();
+        requestWakeLock();
+        render();
+    }
+
+    function startWithRounds(rounds) {
+        state.targetRounds = rounds;
+        state.completedRounds = 0;
+        state.timeLimit = '';
         state.isPlaying = true;
         state.totalTime = 0;
         const phases = getCurrentPhases();
@@ -563,7 +615,25 @@ document.addEventListener('DOMContentLoaded', () => {
             playTone();
             needsRender = true;
 
-            // End session when reaching the last phase after time limit
+            // Track completed rounds for 4-7-8 mode
+            // A round is complete when we transition from last phase (exhale) back to first phase (inhale)
+            if (previousCount === phases.length - 1 && newCount === 0) {
+                state.completedRounds++;
+                needsRender = true;
+
+                // For 4-7-8 with target rounds, check if we've completed all rounds
+                if (state.exerciseType === 'fourSevenEight' && state.targetRounds > 0 && state.completedRounds >= state.targetRounds) {
+                    state.sessionComplete = true;
+                    state.isPlaying = false;
+                    state.hasStarted = false;
+                    cancelAnimationFrame(animationFrameId);
+                    releaseWakeLock();
+                    drawScene({ progress: 1, showTrail: false, phase: state.count });
+                    needsRender = true;
+                }
+            }
+
+            // End session when reaching the last phase after time limit (for minute-based exercises)
             const lastPhaseIndex = phases.length - 1;
             if (state.count === lastPhaseIndex && state.timeLimitReached) {
                 state.sessionComplete = true;
@@ -599,10 +669,17 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
 
         if (state.isPlaying) {
-            html += `
-                <div class="timer">Total Time: ${formatTime(state.totalTime)}</div>
-                <div class="instruction">${getInstruction(state.count)}</div>
-            `;
+            // Timer display - show rounds for 4-7-8, time for others
+            if (state.exerciseType === 'fourSevenEight' && state.targetRounds > 0) {
+                html += `<div class="timer">Round ${state.completedRounds + 1} of ${state.targetRounds}</div>`;
+            } else {
+                html += `<div class="timer">Total Time: ${formatTime(state.totalTime)}</div>`;
+            }
+            html += `<div class="instruction">${getInstruction(state.count)}</div>`;
+            // Show countdown number if enabled
+            if (state.countdownEnabled) {
+                html += `<div class="countdown">${state.countdown}</div>`;
+            }
             html += `<div class="phase-tracker">`;
             phases.forEach((phase, index) => {
                 const phaseColor = phase.color;
@@ -649,16 +726,26 @@ document.addEventListener('DOMContentLoaded', () => {
                         </label>
                     </div>
                     <div class="form-group">
+                        <label class="switch">
+                            <input type="checkbox" id="countdown-toggle" ${state.countdownEnabled ? 'checked' : ''}>
+                            <span class="slider"></span>
+                        </label>
+                        <label for="countdown-toggle">
+                            ${icons.hash}
+                            Countdown ${state.countdownEnabled ? 'On' : 'Off'}
+                        </label>
+                    </div>
+                    <div class="form-group">
                         <input
                             type="number"
                             inputmode="numeric"
-                            placeholder="Time limit (minutes)"
+                            placeholder="${state.exerciseType === 'fourSevenEight' ? 'Rounds' : 'Time limit (minutes)'}"
                             value="${state.timeLimit}"
                             id="time-limit"
                             step="1"
                             min="0"
                         >
-                        <label for="time-limit">Minutes (optional)</label>
+                        <label for="time-limit">${state.exerciseType === 'fourSevenEight' ? 'Rounds (optional)' : 'Minutes (optional)'}</label>
                     </div>
                 </div>
                 <div class="prompt">Press start to begin</div>
@@ -699,19 +786,37 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (!state.isPlaying && !state.sessionComplete) {
-            html += `
-                <div class="shortcut-buttons">
-                    <button id="preset-2min" class="preset-button">
-                        ${icons.clock} 2 min
-                    </button>
-                    <button id="preset-5min" class="preset-button">
-                        ${icons.clock} 5 min
-                    </button>
-                    <button id="preset-10min" class="preset-button">
-                        ${icons.clock} 10 min
-                    </button>
-                </div>
-            `;
+            if (state.exerciseType === 'fourSevenEight') {
+                // Rounds-based presets for 4-7-8
+                html += `
+                    <div class="shortcut-buttons">
+                        <button id="preset-4rounds" class="preset-button">
+                            ${icons.clock} 4 rounds
+                        </button>
+                        <button id="preset-6rounds" class="preset-button">
+                            ${icons.clock} 6 rounds
+                        </button>
+                        <button id="preset-8rounds" class="preset-button">
+                            ${icons.clock} 8 rounds
+                        </button>
+                    </div>
+                `;
+            } else {
+                // Minutes-based presets for other exercises
+                html += `
+                    <div class="shortcut-buttons">
+                        <button id="preset-2min" class="preset-button">
+                            ${icons.clock} 2 min
+                        </button>
+                        <button id="preset-5min" class="preset-button">
+                            ${icons.clock} 5 min
+                        </button>
+                        <button id="preset-10min" class="preset-button">
+                            ${icons.clock} 10 min
+                        </button>
+                    </div>
+                `;
+            }
         }
 
         app.innerHTML = html;
@@ -726,6 +831,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (!state.isPlaying && !state.sessionComplete) {
             document.getElementById('sound-toggle').addEventListener('change', toggleSound);
+            document.getElementById('countdown-toggle').addEventListener('change', toggleCountdown);
             const timeLimitInput = document.getElementById('time-limit');
             timeLimitInput.addEventListener('input', handleTimeLimitChange);
 
@@ -739,7 +845,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Phase time slider
             const phaseTimeSlider = document.getElementById('phase-time-slider');
             if (phaseTimeSlider) {
-                phaseTimeSlider.addEventListener('input', function() {
+                phaseTimeSlider.addEventListener('input', function () {
                     const value = parseFloat(this.value);
                     if (state.exerciseType === 'longExhale') {
                         state.exhaleDuration = value;
@@ -751,9 +857,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
 
-            document.getElementById('preset-2min').addEventListener('click', () => startWithPreset(2));
-            document.getElementById('preset-5min').addEventListener('click', () => startWithPreset(5));
-            document.getElementById('preset-10min').addEventListener('click', () => startWithPreset(10));
+            // Preset buttons - rounds for 4-7-8, minutes for others
+            if (state.exerciseType === 'fourSevenEight') {
+                document.getElementById('preset-4rounds').addEventListener('click', () => startWithRounds(4));
+                document.getElementById('preset-6rounds').addEventListener('click', () => startWithRounds(6));
+                document.getElementById('preset-8rounds').addEventListener('click', () => startWithRounds(8));
+            } else {
+                document.getElementById('preset-2min').addEventListener('click', () => startWithPreset(2));
+                document.getElementById('preset-5min').addEventListener('click', () => startWithPreset(5));
+                document.getElementById('preset-10min').addEventListener('click', () => startWithPreset(10));
+            }
         }
         if (!state.isPlaying) {
             drawScene({ progress: state.sessionComplete ? 1 : 0, phase: state.count, showTrail: false });
