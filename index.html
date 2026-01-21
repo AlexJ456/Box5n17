@@ -223,6 +223,8 @@
             transition: background 0.2s ease;
             /* iOS tap highlight and selection fixes */
             -webkit-tap-highlight-color: transparent;
+            -webkit-appearance: none;
+            appearance: none;
             -webkit-touch-callout: none;
             -webkit-user-select: none;
             user-select: none;
@@ -237,6 +239,13 @@
         button:active {
             background: linear-gradient(to bottom, #d97706, #b45309);
             outline: none;
+        }
+
+        #toggle-play,
+        #toggle-play:hover,
+        #toggle-play:focus,
+        #toggle-play:active {
+            background: linear-gradient(to bottom, #d97706, #b45309);
         }
 
         .switch {
