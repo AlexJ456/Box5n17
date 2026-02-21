@@ -596,8 +596,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const remaining = currentPhaseDuration - phaseElapsed;
         const hasHalfSecond = currentPhaseDuration % 1 !== 0;
         let newCountdown;
-        if (hasHalfSecond) {
-            newCountdown = Math.ceil(remaining * 2) / 2;
+        if (hasHalfSecond && remaining > Math.floor(currentPhaseDuration)) {
+            newCountdown = currentPhaseDuration;
         } else {
             newCountdown = Math.ceil(remaining);
         }
