@@ -593,7 +593,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const currentPhaseDuration = phases[newCount].duration;
         const phaseElapsed = cycleElapsed - phaseStartTime;
         const progress = phaseElapsed / currentPhaseDuration;
-        const newCountdown = Math.ceil(currentPhaseDuration - phaseElapsed);
+        const remaining = currentPhaseDuration - phaseElapsed;
+        const hasHalfSecond = currentPhaseDuration % 1 !== 0;
+        let newCountdown;
+        if (hasHalfSecond) {
+            newCountdown = Math.ceil(remaining * 2) / 2;
+        } else {
+            newCountdown = Math.ceil(remaining);
+        }
 
         let needsRender = false;
 
@@ -633,9 +640,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            // End session when reaching the last phase after time limit (for minute-based exercises)
-            const lastPhaseIndex = phases.length - 1;
-            if (state.count === lastPhaseIndex && state.timeLimitReached) {
+            // End session after completing full cycle when time limit reached (for minute-based exercises)
+            if (previousCount === phases.length - 1 && newCount === 0 && state.timeLimitReached) {
                 state.sessionComplete = true;
                 state.isPlaying = false;
                 state.hasStarted = false;
@@ -678,7 +684,8 @@ document.addEventListener('DOMContentLoaded', () => {
             html += `<div class="instruction">${getInstruction(state.count)}</div>`;
             // Show countdown number if enabled
             if (state.countdownEnabled) {
-                html += `<div class="countdown">${state.countdown}</div>`;
+                const countdownDisplay = state.countdown % 1 !== 0 ? state.countdown.toFixed(1) : state.countdown;
+                html += `<div class="countdown">${countdownDisplay}</div>`;
             }
             html += `<div class="phase-tracker">`;
             phases.forEach((phase, index) => {
