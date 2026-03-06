@@ -580,6 +580,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const now = performance.now();
         const phases = getCurrentPhases();
         const totalCycleTime = getTotalCycleTime();
+        const exhaleIndex = phases.findIndex(p => p.name === 'Exhale');
 
         // Calculate absolute timing
         const totalElapsed = (now - state.startTime) / 1000;
@@ -620,53 +621,49 @@ document.addEventListener('DOMContentLoaded', () => {
             needsRender = true;
         }
 
-        const timeLimitSeconds = parseInt(state.timeLimit) * 60 || 0;
-        if (state.timeLimit && !state.timeLimitReached && state.totalTime >= timeLimitSeconds) {
-            state.timeLimitReached = true;
-            needsRender = true;
-        }
-
         const previousCount = state.count;
         state.count = newCount;
-        if (state.count !== previousCount) {
+
+        const isPhaseTransition = state.count !== previousCount;
+        const exhaleJustCompleted = isPhaseTransition && exhaleIndex >= 0 && previousCount === exhaleIndex;
+
+        if (isPhaseTransition) {
             state.pulseStartTime = now;
             playTone();
             needsRender = true;
+        }
 
-            // Track completed rounds for 4-7-8 mode
-            // A round is complete when we transition from last phase (exhale) back to first phase (inhale)
-            if (previousCount === phases.length - 1 && newCount === 0) {
-                state.completedRounds++;
-                needsRender = true;
+        // Track completed rounds for 4-7-8 mode
+        // A round is complete when we transition from last phase (exhale) back to first phase (inhale)
+        if (isPhaseTransition && previousCount === phases.length - 1 && newCount === 0) {
+            state.completedRounds++;
+            needsRender = true;
 
-                // For 4-7-8 with target rounds, check if we've completed all rounds
-                if (state.exerciseType === 'fourSevenEight' && state.targetRounds > 0 && state.completedRounds >= state.targetRounds) {
-                    state.sessionComplete = true;
-                    state.isPlaying = false;
-                    state.hasStarted = false;
-                    cancelAnimationFrame(animationFrameId);
-                    releaseWakeLock();
-                    drawScene({ progress: 1, showTrail: false, phase: state.count });
-                    needsRender = true;
-                }
-            }
-
-            // End session after a complete exhale once time limit has been reached
-            const exhaleIndex = phases.findIndex(p => p.name === 'Exhale');
-            if (exhaleIndex >= 0 && newCount === exhaleIndex && state.timeLimitReached) {
-                // We just entered the Exhale phase after the time limit — mark ready to end
+            // For 4-7-8 with target rounds, check if we've completed all rounds.
+            // Mark it to end on this exhale completion transition.
+            if (state.exerciseType === 'fourSevenEight' && state.targetRounds > 0 && state.completedRounds >= state.targetRounds) {
                 state.readyToEndAfterExhale = true;
             }
-            if (previousCount === exhaleIndex && state.readyToEndAfterExhale) {
-                // Exhale phase just completed — end the session
-                state.sessionComplete = true;
-                state.isPlaying = false;
-                state.hasStarted = false;
-                cancelAnimationFrame(animationFrameId);
-                releaseWakeLock();
-                drawScene({ progress: 1, showTrail: false, phase: exhaleIndex });
-                needsRender = true;
-            }
+        }
+
+        const parsedLimit = Number.parseInt(state.timeLimit, 10);
+        const timeLimitSeconds = Number.isFinite(parsedLimit) ? parsedLimit * 60 : 0;
+        if (state.timeLimit && !state.timeLimitReached && totalElapsed >= timeLimitSeconds) {
+            state.timeLimitReached = true;
+            state.readyToEndAfterExhale = true;
+            needsRender = true;
+        }
+
+        // All exercise endings are aligned to exhale completion.
+        if (exhaleJustCompleted && state.readyToEndAfterExhale) {
+            state.sessionComplete = true;
+            state.isPlaying = false;
+            state.hasStarted = false;
+            state.readyToEndAfterExhale = false;
+            cancelAnimationFrame(animationFrameId);
+            releaseWakeLock();
+            drawScene({ progress: 1, showTrail: false, phase: exhaleIndex >= 0 ? exhaleIndex : previousCount });
+            needsRender = true;
         }
 
         if (newCountdown !== state.countdown) {
@@ -680,8 +677,11 @@ document.addEventListener('DOMContentLoaded', () => {
             render();
         }
 
-        animationFrameId = requestAnimationFrame(animate);
+        if (state.isPlaying) {
+            animationFrameId = requestAnimationFrame(animate);
+        }
     }
+
 
     function render() {
         const exercise = exerciseTypes[state.exerciseType];
