@@ -80,7 +80,8 @@ document.addEventListener('DOMContentLoaded', () => {
         hasStarted: false,
         startTime: null,
         targetRounds: 0,
-        completedRounds: 0
+        completedRounds: 0,
+        readyToEndAfterExhale: false
     };
 
     // Settings persistence
@@ -331,6 +332,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function togglePlay() {
+        // Read time limit directly from input before DOM is rebuilt
+        const timeLimitInput = document.getElementById('time-limit');
+        if (timeLimitInput) {
+            state.timeLimit = timeLimitInput.value.replace(/[^0-9]/g, '');
+        }
         state.isPlaying = !state.isPlaying;
         if (state.isPlaying) {
             if (audioContext && audioContext.state === 'suspended') {
@@ -345,6 +351,7 @@ document.addEventListener('DOMContentLoaded', () => {
             state.count = 0;
             state.sessionComplete = false;
             state.timeLimitReached = false;
+            state.readyToEndAfterExhale = false;
             state.completedRounds = 0;
             // For 4-7-8, treat timeLimit as rounds instead of minutes
             if (state.exerciseType === 'fourSevenEight' && state.timeLimit) {
@@ -365,6 +372,7 @@ document.addEventListener('DOMContentLoaded', () => {
             state.count = 0;
             state.sessionComplete = false;
             state.timeLimitReached = false;
+            state.readyToEndAfterExhale = false;
             state.hasStarted = false;
             state.targetRounds = 0;
             state.completedRounds = 0;
@@ -386,6 +394,7 @@ document.addEventListener('DOMContentLoaded', () => {
         state.sessionComplete = false;
         state.timeLimit = '';
         state.timeLimitReached = false;
+        state.readyToEndAfterExhale = false;
         state.pulseStartTime = null;
         state.hasStarted = false;
         state.startTime = null;
@@ -432,6 +441,7 @@ document.addEventListener('DOMContentLoaded', () => {
         state.count = 0;
         state.sessionComplete = false;
         state.timeLimitReached = false;
+        state.readyToEndAfterExhale = false;
         state.pulseStartTime = performance.now();
         state.hasStarted = true;
         state.startTime = performance.now();
@@ -457,6 +467,7 @@ document.addEventListener('DOMContentLoaded', () => {
         state.count = 0;
         state.sessionComplete = false;
         state.timeLimitReached = false;
+        state.readyToEndAfterExhale = false;
         state.pulseStartTime = performance.now();
         state.hasStarted = true;
         state.startTime = performance.now();
@@ -640,15 +651,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            // End session after exhale phase when time limit reached (for minute-based exercises)
+            // End session after a complete exhale once time limit has been reached
             const exhaleIndex = phases.findIndex(p => p.name === 'Exhale');
-            if (exhaleIndex >= 0 && previousCount === exhaleIndex && newCount === (exhaleIndex + 1) % phases.length && state.timeLimitReached) {
+            if (exhaleIndex >= 0 && newCount === exhaleIndex && state.timeLimitReached) {
+                // We just entered the Exhale phase after the time limit — mark ready to end
+                state.readyToEndAfterExhale = true;
+            }
+            if (previousCount === exhaleIndex && state.readyToEndAfterExhale) {
+                // Exhale phase just completed — end the session
                 state.sessionComplete = true;
                 state.isPlaying = false;
                 state.hasStarted = false;
                 cancelAnimationFrame(animationFrameId);
                 releaseWakeLock();
-                drawScene({ progress: 1, showTrail: false, phase: state.count });
+                drawScene({ progress: 1, showTrail: false, phase: exhaleIndex });
                 needsRender = true;
             }
         }
