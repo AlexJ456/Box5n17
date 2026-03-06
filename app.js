@@ -640,8 +640,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            // End session after completing full cycle when time limit reached (for minute-based exercises)
-            if (previousCount === phases.length - 1 && newCount === 0 && state.timeLimitReached) {
+            // End session after exhale phase when time limit reached (for minute-based exercises)
+            const exhaleIndex = phases.findIndex(p => p.name === 'Exhale');
+            if (exhaleIndex >= 0 && previousCount === exhaleIndex && newCount === (exhaleIndex + 1) % phases.length && state.timeLimitReached) {
                 state.sessionComplete = true;
                 state.isPlaying = false;
                 state.hasStarted = false;
