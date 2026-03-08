@@ -284,20 +284,39 @@ document.addEventListener('DOMContentLoaded', () => {
         return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }
 
-    function playTone() {
+    function playTone({ isCompletionBell = false } = {}) {
         if (!state.soundEnabled || !audioContext) return;
         try {
-            const oscillator = audioContext.createOscillator();
-            oscillator.type = 'triangle';
-            oscillator.frequency.setValueAtTime(528, audioContext.currentTime);
             const gainNode = audioContext.createGain();
-            gainNode.gain.setValueAtTime(0, audioContext.currentTime);
-            gainNode.gain.linearRampToValueAtTime(0.5, audioContext.currentTime + 0.01);
-            gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.3);
-            oscillator.connect(gainNode);
             gainNode.connect(audioContext.destination);
-            oscillator.start(audioContext.currentTime);
-            oscillator.stop(audioContext.currentTime + 0.3);
+
+            if (isCompletionBell) {
+                const now = audioContext.currentTime;
+                const bellNotes = [880, 1174.66];
+
+                gainNode.gain.setValueAtTime(0.0001, now);
+                gainNode.gain.exponentialRampToValueAtTime(0.45, now + 0.02);
+                gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 1.2);
+
+                bellNotes.forEach((frequency, index) => {
+                    const oscillator = audioContext.createOscillator();
+                    oscillator.type = index === 0 ? 'sine' : 'triangle';
+                    oscillator.frequency.setValueAtTime(frequency, now);
+                    oscillator.connect(gainNode);
+                    oscillator.start(now);
+                    oscillator.stop(now + 1.2);
+                });
+            } else {
+                const oscillator = audioContext.createOscillator();
+                oscillator.type = 'triangle';
+                oscillator.frequency.setValueAtTime(528, audioContext.currentTime);
+                gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+                gainNode.gain.linearRampToValueAtTime(0.5, audioContext.currentTime + 0.01);
+                gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.3);
+                oscillator.connect(gainNode);
+                oscillator.start(audioContext.currentTime);
+                oscillator.stop(audioContext.currentTime + 0.3);
+            }
         } catch (e) {
             console.error('Error playing tone:', e);
         }
@@ -627,9 +646,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const isPhaseTransition = state.count !== previousCount;
         const exhaleJustCompleted = isPhaseTransition && exhaleIndex >= 0 && previousCount === exhaleIndex;
 
+        const isFinalTimedTransition = exhaleJustCompleted && state.readyToEndAfterExhale && state.timeLimitReached;
+
         if (isPhaseTransition) {
             state.pulseStartTime = now;
-            playTone();
+            playTone({ isCompletionBell: isFinalTimedTransition });
             needsRender = true;
         }
 
