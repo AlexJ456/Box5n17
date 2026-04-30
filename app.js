@@ -646,15 +646,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const isPhaseTransition = state.count !== previousCount;
         const exhaleJustCompleted = isPhaseTransition && exhaleIndex >= 0 && previousCount === exhaleIndex;
 
-// Completion bell should play whenever this transition is the one that ends the session,
-// regardless of whether it was time-limit based or rounds-based.
-        const isFinalCompletionTransition = exhaleJustCompleted && state.readyToEndAfterExhale;
+        const isFinalTimedTransition = exhaleJustCompleted && state.readyToEndAfterExhale && state.timeLimitReached;
 
         if (isPhaseTransition) {
-        state.pulseStartTime = now;
-        playTone({ isCompletionBell: isFinalCompletionTransition });
-        needsRender = true;
-}
+            state.pulseStartTime = now;
+            playTone({ isCompletionBell: isFinalTimedTransition });
+            needsRender = true;
+        }
 
         // Track completed rounds for 4-7-8 mode
         // A round is complete when we transition from last phase (exhale) back to first phase (inhale)
