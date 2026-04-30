@@ -1,4 +1,4 @@
-const CACHE_NAME = 'breathing-exercises-cache-v19'; // Versioned cache name
+const CACHE_NAME = 'breathing-exercises-cache-v20'; // Versioned cache name
 const urlsToCache = [
   './',
   './index.html',
