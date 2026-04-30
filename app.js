@@ -646,7 +646,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const isPhaseTransition = state.count !== previousCount;
         const exhaleJustCompleted = isPhaseTransition && exhaleIndex >= 0 && previousCount === exhaleIndex;
 
-        const isFinalTimedTransition = exhaleJustCompleted && state.readyToEndAfterExhale && state.timeLimitReached;
+        const isFinalTimedTransition = exhaleJustCompleted && (state.readyToEndAfterExhale && state.timeLimitReached || (state.exerciseType === 'fourSevenEight' && state.targetRounds > 0 && state.completedRounds + 1 >= state.targetRounds));
 
         if (isPhaseTransition) {
             state.pulseStartTime = now;
