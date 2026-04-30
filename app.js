@@ -646,8 +646,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const isPhaseTransition = state.count !== previousCount;
         const exhaleJustCompleted = isPhaseTransition && exhaleIndex >= 0 && previousCount === exhaleIndex;
 
+        const isFinalTimedTransition = exhaleJustCompleted && state.readyToEndAfterExhale && state.timeLimitReached;
+
         if (isPhaseTransition) {
             state.pulseStartTime = now;
+            playTone({ isCompletionBell: isFinalTimedTransition });
             needsRender = true;
         }
 
@@ -672,14 +675,8 @@ document.addEventListener('DOMContentLoaded', () => {
             needsRender = true;
         }
 
-        const isFinalTransition = exhaleJustCompleted && state.readyToEndAfterExhale;
-
-        if (isPhaseTransition) {
-            playTone({ isCompletionBell: isFinalTransition });
-        }
-
         // All exercise endings are aligned to exhale completion.
-        if (isFinalTransition) {
+        if (exhaleJustCompleted && state.readyToEndAfterExhale) {
             state.sessionComplete = true;
             state.isPlaying = false;
             state.hasStarted = false;
