@@ -646,11 +646,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const isPhaseTransition = state.count !== previousCount;
         const exhaleJustCompleted = isPhaseTransition && exhaleIndex >= 0 && previousCount === exhaleIndex;
 
-        const isFinalTimedTransition = exhaleJustCompleted && state.readyToEndAfterExhale && state.timeLimitReached;
+        const isCompletionTransition = exhaleJustCompleted && state.readyToEndAfterExhale;
 
         if (isPhaseTransition) {
             state.pulseStartTime = now;
-            playTone({ isCompletionBell: isFinalTimedTransition });
+            playTone({ isCompletionBell: isCompletionTransition });
             needsRender = true;
         }
 
@@ -719,33 +719,24 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 html += `<div class="timer">Total Time: ${formatTime(state.totalTime)}</div>`;
             }
-            html += `<div class="instruction">${getInstruction(state.count)}</div>`;
-            // Show countdown number if enabled
-            if (state.countdownEnabled) {
-                const countdownDisplay = state.countdown % 1 !== 0 ? state.countdown.toFixed(1) : state.countdown;
-                html += `<div class="countdown">${countdownDisplay}</div>`;
-            }
-            html += `<div class="phase-tracker">`;
-            phases.forEach((phase, index) => {
-                const phaseColor = phase.color;
-                const softPhaseColor = hexToRgba(phaseColor, 0.25);
-                html += `
-                    <div class="phase-item ${index === state.count ? 'active' : ''}" style="--phase-color: ${phaseColor}; --phase-soft: ${softPhaseColor};">
-                        <span class="phase-dot"></span>
-                        <span class="phase-label">${phase.name}</span>
+
+            html += `
+                <div class="countdown">${state.countdownEnabled ? state.countdown : '&nbsp;'}</div>
+                <div class="instruction">${getInstruction(state.count)}</div>
+            `;
+        } else if (state.sessionComplete) {
+            html += `
+                <div class="session-complete-container">
+                    <div class="session-complete">
+                        Session Complete! 🎉
                     </div>
-                `;
-            });
-            html += `</div>`;
-        }
-
-        if (state.timeLimitReached && !state.sessionComplete) {
-            const limitMessage = state.isPlaying ? 'Finishing current cycle...' : 'Time limit reached';
-            html += `<div class="limit-warning">${limitMessage}</div>`;
-        }
-
-        if (!state.isPlaying && !state.sessionComplete) {
-            // Exercise type selector
+                    <button id="reset-button" class="glass-button reset-button session-complete-reset">
+                        ${icons.rotateCcw}
+                        Reset
+                    </button>
+                </div>
+            `;
+        } else {
             html += `<div class="exercise-selector">`;
             Object.entries(exerciseTypes).forEach(([key, ex]) => {
                 html += `
@@ -759,128 +750,114 @@ document.addEventListener('DOMContentLoaded', () => {
             html += `<p class="exercise-description">${exercise.description}</p>`;
 
             html += `
-                <div class="settings">
-                    <div class="form-group">
-                        <label class="switch">
-                            <input type="checkbox" id="sound-toggle" ${state.soundEnabled ? 'checked' : ''}>
-                            <span class="slider"></span>
-                        </label>
+                <div class="controls">
+                    <div class="toggle-group">
+                        <input type="checkbox" id="sound-toggle" ${state.soundEnabled ? 'checked' : ''}>
                         <label for="sound-toggle">
                             ${state.soundEnabled ? icons.volume2 : icons.volumeX}
                             Sound ${state.soundEnabled ? 'On' : 'Off'}
                         </label>
                     </div>
-                    <div class="form-group">
-                        <label class="switch">
-                            <input type="checkbox" id="countdown-toggle" ${state.countdownEnabled ? 'checked' : ''}>
-                            <span class="slider"></span>
-                        </label>
+                    <div class="toggle-group">
+                        <input type="checkbox" id="countdown-toggle" ${state.countdownEnabled ? 'checked' : ''}>
                         <label for="countdown-toggle">
-                            ${icons.hash}
+                            ${icons.clock}
                             Countdown ${state.countdownEnabled ? 'On' : 'Off'}
                         </label>
                     </div>
-                    <div class="form-group">
-                        <input
-                            type="number"
-                            inputmode="numeric"
-                            placeholder="${state.exerciseType === 'fourSevenEight' ? 'Rounds' : 'Time limit (minutes)'}"
-                            value="${state.timeLimit}"
-                            id="time-limit"
-                            step="1"
-                            min="0"
-                        >
-                        <label for="time-limit">${state.exerciseType === 'fourSevenEight' ? 'Rounds (optional)' : 'Minutes (optional)'}</label>
-                    </div>
                 </div>
-                <div class="prompt">Press start to begin</div>
+
+                <div class="time-limit-input-group floating-label-input">
+                    <input
+                        type="text"
+                        id="time-limit"
+                        inputmode="numeric"
+                        pattern="[0-9]*"
+                        value="${state.timeLimit}"
+                        placeholder="${state.exerciseType === 'fourSevenEight' ? 'Rounds' : 'Time limit (minutes)'}"
+                    />
+                    <label for="time-limit">${state.exerciseType === 'fourSevenEight' ? 'Rounds (optional)' : 'Minutes (optional)'}</label>
+                </div>
             `;
         }
 
-        if (state.sessionComplete) {
-            html += `<div class="complete">Complete!</div>`;
-        }
-
-        if (!state.sessionComplete) {
-            html += `
-                <button id="toggle-play">
-                    ${state.isPlaying ? icons.pause : icons.play}
-                    ${state.isPlaying ? 'Pause' : 'Start'}
-                </button>
-            `;
-        }
+        html += `
+            <div class="button-container ${state.sessionComplete ? 'session-complete-actions' : ''}">
+                ${!state.sessionComplete ? `
+                    <button id="play-pause-button" class="glass-button play-pause-button ${state.isPlaying ? 'pause' : 'play'}">
+                        ${state.isPlaying ? icons.pause : icons.play}
+                        ${state.isPlaying ? 'Pause' : 'Start'}
+                    </button>
+                ` : ''}
+                ${!state.isPlaying && !state.sessionComplete ? `
+                    <button id="reset-button" class="glass-button reset-button">
+                        ${icons.rotateCcw}
+                        Reset
+                    </button>
+                ` : ''}
+            </div>
+        `;
 
         if (!state.isPlaying && !state.sessionComplete && exercise.hasPhaseTimeSlider) {
             const range = exercise.phaseTimeRange;
             const currentValue = state.exerciseType === 'longExhale' ? state.exhaleDuration : state.phaseTime;
             html += `
-                <div class="slider-container">
+                <div class="phase-time-slider-group">
                     <label for="phase-time-slider">${exercise.phaseTimeLabel} (seconds): <span id="phase-time-value">${currentValue}</span></label>
-                    <input type="range" min="${range.min}" max="${range.max}" step="${range.step}" value="${currentValue}" id="phase-time-slider">
+                    <input type="range" id="phase-time-slider" min="${range.min}" max="${range.max}" step="${range.step}" value="${currentValue}">
                 </div>
             `;
         }
 
-        if (state.sessionComplete) {
-            html += `
-                <button id="reset">
-                    ${icons.rotateCcw}
-                    Back to Start
-                </button>
-            `;
-        }
-
         if (!state.isPlaying && !state.sessionComplete) {
+            html += `<div class="quick-start-presets"><div class="preset-label">Quick Start:</div>`;
+            const presets = [];
+
             if (state.exerciseType === 'fourSevenEight') {
-                // Rounds-based presets for 4-7-8
-                html += `
-                    <div class="shortcut-buttons">
-                        <button id="preset-4rounds" class="preset-button">
-                            ${icons.clock} 4 rounds
-                        </button>
-                        <button id="preset-6rounds" class="preset-button">
-                            ${icons.clock} 6 rounds
-                        </button>
-                        <button id="preset-8rounds" class="preset-button">
-                            ${icons.clock} 8 rounds
-                        </button>
-                    </div>
-                `;
+                // Round-based presets for 4-7-8
+                presets.push(
+                    { label: '4 rounds', rounds: 4 },
+                    { label: '6 rounds', rounds: 6 },
+                    { label: '8 rounds', rounds: 8 }
+                );
             } else {
                 // Minutes-based presets for other exercises
-                html += `
-                    <div class="shortcut-buttons">
-                        <button id="preset-2min" class="preset-button">
-                            ${icons.clock} 2 min
-                        </button>
-                        <button id="preset-5min" class="preset-button">
-                            ${icons.clock} 5 min
-                        </button>
-                        <button id="preset-10min" class="preset-button">
-                            ${icons.clock} 10 min
-                        </button>
-                    </div>
-                `;
+                presets.push(
+                    { label: '2 min', minutes: 2 },
+                    { label: '5 min', minutes: 5 },
+                    { label: '10 min', minutes: 10 }
+                );
             }
+
+            presets.forEach((preset) => {
+                if (state.exerciseType === 'fourSevenEight') {
+                    html += `<button class="preset-button" data-rounds="${preset.rounds}">${icons.hash} ${preset.label}</button>`;
+                } else {
+                    html += `<button class="preset-button" data-minutes="${preset.minutes}">${icons.clock} ${preset.label}</button>`;
+                }
+            });
+            html += `</div>`;
         }
 
         app.innerHTML = html;
-
         updateCanvasVisibility();
 
-        if (!state.sessionComplete) {
-            document.getElementById('toggle-play').addEventListener('click', togglePlay);
+        const playPauseButton = document.getElementById('play-pause-button');
+        if (playPauseButton) {
+            playPauseButton.addEventListener('click', togglePlay);
         }
-        if (state.sessionComplete) {
-            document.getElementById('reset').addEventListener('click', resetToStart);
+
+        const resetButton = document.getElementById('reset-button');
+        if (resetButton) {
+            resetButton.addEventListener('click', resetToStart);
         }
+
         if (!state.isPlaying && !state.sessionComplete) {
             document.getElementById('sound-toggle').addEventListener('change', toggleSound);
             document.getElementById('countdown-toggle').addEventListener('change', toggleCountdown);
-            const timeLimitInput = document.getElementById('time-limit');
-            timeLimitInput.addEventListener('input', handleTimeLimitChange);
+            document.getElementById('time-limit').addEventListener('input', handleTimeLimitChange);
 
-            // Exercise type buttons
+            // Exercise selector buttons
             document.querySelectorAll('.exercise-button').forEach(btn => {
                 btn.addEventListener('click', () => {
                     setExerciseType(btn.dataset.exercise);
@@ -890,8 +867,8 @@ document.addEventListener('DOMContentLoaded', () => {
             // Phase time slider
             const phaseTimeSlider = document.getElementById('phase-time-slider');
             if (phaseTimeSlider) {
-                phaseTimeSlider.addEventListener('input', function () {
-                    const value = parseFloat(this.value);
+                phaseTimeSlider.addEventListener('input', (e) => {
+                    const value = parseFloat(e.target.value);
                     if (state.exerciseType === 'longExhale') {
                         state.exhaleDuration = value;
                     } else {
@@ -902,22 +879,38 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
 
-            // Preset buttons - rounds for 4-7-8, minutes for others
-            if (state.exerciseType === 'fourSevenEight') {
-                document.getElementById('preset-4rounds').addEventListener('click', () => startWithRounds(4));
-                document.getElementById('preset-6rounds').addEventListener('click', () => startWithRounds(6));
-                document.getElementById('preset-8rounds').addEventListener('click', () => startWithRounds(8));
-            } else {
-                document.getElementById('preset-2min').addEventListener('click', () => startWithPreset(2));
-                document.getElementById('preset-5min').addEventListener('click', () => startWithPreset(5));
-                document.getElementById('preset-10min').addEventListener('click', () => startWithPreset(10));
-            }
-        }
-        if (!state.isPlaying) {
-            drawScene({ progress: state.sessionComplete ? 1 : 0, phase: state.count, showTrail: false });
+            // Quick start preset buttons
+            document.querySelectorAll('.preset-button').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    if (state.exerciseType === 'fourSevenEight') {
+                        const rounds = parseInt(btn.dataset.rounds, 10);
+                        if (Number.isFinite(rounds) && rounds > 0) {
+                            startWithRounds(rounds);
+                        }
+                    } else {
+                        const minutes = parseInt(btn.dataset.minutes, 10);
+                        if (Number.isFinite(minutes) && minutes > 0) {
+                            startWithPreset(minutes);
+                        }
+                    }
+                });
+            });
         }
     }
 
-    render();
     resizeCanvas();
+    render();
+
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./service-worker.js').then(
+                registration => {
+                    console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                },
+                err => {
+                    console.log('ServiceWorker registration failed: ', err);
+                }
+            );
+        });
+    }
 });
