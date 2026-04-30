@@ -646,11 +646,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const isPhaseTransition = state.count !== previousCount;
         const exhaleJustCompleted = isPhaseTransition && exhaleIndex >= 0 && previousCount === exhaleIndex;
 
-        const isCompletionTransition = exhaleJustCompleted && state.readyToEndAfterExhale;
+        const isFinalTimedTransition = exhaleJustCompleted && state.readyToEndAfterExhale;
 
         if (isPhaseTransition) {
             state.pulseStartTime = now;
-            playTone({ isCompletionBell: isCompletionTransition });
+            playTone({ isCompletionBell: isFinalTimedTransition });
             needsRender = true;
         }
 
